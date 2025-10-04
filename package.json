@@ -1,0 +1,40 @@
+{
+  "name": "chain-x-eth-example",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx"
+  },
+  "dependencies": {
+    "@aptos-labs/derived-wallet-ethereum": "^0.8.0",
+    "@aptos-labs/derived-wallet-solana": "^0.8.0",
+    "@aptos-labs/ts-sdk": "^5.1.0",
+    "@aptos-labs/wallet-adapter-core": "^7.4.0",
+    "@aptos-labs/wallet-adapter-react": "^7.1.0",
+    "@aptos-labs/wallet-standard": "^0.5.2",
+    "ethers": "6.15.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.36.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0",
+    "@typescript-eslint/eslint-plugin": "8.45.0",
+    "@typescript-eslint/parser": "8.45.0",
+    "@vitejs/plugin-react": "5.0.4",
+    "autoprefixer": "^10.4.21",
+    "eslint": "9.36.0",
+    "eslint-plugin-react-hooks": "6.1.0",
+    "eslint-plugin-react-refresh": "0.4.23",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.14",
+    "typescript": "5.9.3",
+    "vite": "7.1.9"
+  }
+}
