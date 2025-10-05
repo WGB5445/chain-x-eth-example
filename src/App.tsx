@@ -4,24 +4,26 @@ import { useAptosClient, useNetworkContext } from './main';
 import { useWallet } from '@aptos-labs/wallet-adapter-react';
 import WalletPopup from './WalletPopup';
 import { setupAutomaticEthereumWalletDerivation } from '@aptos-labs/derived-wallet-ethereum';
+import ToastContainer from './ToastContainer';
+import { useToast } from './useToast';
 
 
-// Aptos 网络配置
+// Aptos Network Configuration
 const APTOS_NETWORKS = {
   devnet: {
     name: 'Aptos Devnet',
     network: Network.DEVNET,
-    description: 'Aptos 开发网络'
+    description: 'Aptos Development Network'
   },
   testnet: {
     name: 'Aptos Testnet', 
     network: Network.TESTNET,
-    description: 'Aptos 测试网络'
+    description: 'Aptos Test Network'
   },
   mainnet: {
     name: 'Aptos Mainnet',
     network: Network.MAINNET,
-    description: 'Aptos 主网'
+    description: 'Aptos Mainnet'
   }
 } as const;
 
@@ -30,19 +32,20 @@ type AptosNetworkType = keyof typeof APTOS_NETWORKS;
 const fallbackVerifyingContract = '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC';
 
 const formatAddress = (value: string | null | undefined) =>
-  value ? `${value.slice(0, 6)}...${value.slice(-4)}` : '未连接';
+  value ? `${value.slice(0, 6)}...${value.slice(-4)}` : 'Not Connected';
 
 
 function App() {
   const { selectedAptosNetwork, setSelectedAptosNetwork } = useNetworkContext();
   const aptosClient = useAptosClient();
-  // 交易相关状态
+  const { toasts, removeToast, showSuccess, showError, showInfo } = useToast();
+  
+  // Transaction related states
   const [transferAmount, setTransferAmount] = useState<string>('1000');
   const [transferRecipient, setTransferRecipient] = useState<string>('0x1');
   const [message, setMessage] = useState('Hello Aptos!');
   const [status, setStatus] = useState<string>('');
   const [error, setError] = useState<string>('');
-  const [isConnecting, setIsConnecting] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
   const [lastTransaction, setLastTransaction] = useState<any>(null);
   const [transactionHistory, setTransactionHistory] = useState<any[]>([]);
@@ -64,25 +67,26 @@ function App() {
   }, [selectedAptosNetwork]);
 
   const handleWalletConnect = (walletName: string, address: string) => {
-    setStatus(`钱包 ${walletName} 连接成功：${formatAddress(address)}`);
+    showSuccess('Wallet Connected Successfully', `${walletName} connected: ${formatAddress(address)}`, 3000);
   };
 
   const handleWalletDisconnect = async () => {
     try {
       disconnect();
-      setStatus('钱包已断开连接');
+      showInfo('Wallet Disconnected', 'Wallet connection has been disconnected', 2000);
     } catch (error) {
-      console.error('断开连接失败:', error);
+      console.error('Disconnect failed:', error);
+      showError('Disconnect Failed', 'Unable to disconnect wallet', 3000);
     }
   };
 
-  // 复制到剪贴板
+  // Copy to clipboard
   const copyToClipboard = async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      setStatus(`${label} 已复制到剪贴板`);
+      showSuccess(`${label} Copied`, 'Content copied to clipboard', 2000);
     } catch (err) {
-      setError(`复制失败: ${err}`);
+      showError('Copy Failed', `Unable to copy to clipboard: ${err}`, 3000);
     }
   };
 
@@ -123,7 +127,7 @@ function App() {
     setCustomGasPrice('100');
   };
 
-  // 查看交易详情
+  // View transaction details
   const viewTransactionDetails = (transaction: any) => {
     setSelectedTransaction(transaction);
     setShowTransactionModal(true);
@@ -136,21 +140,21 @@ function App() {
       setError('');
       const network = APTOS_NETWORKS[networkType];
       setSelectedAptosNetwork(network.network);
-      setStatus(`已切换到 ${network.name}`);
+      showSuccess('Network Switch Successful', `Switched to ${network.name}`, 2000);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      setError(reason);
+      showError('Network Switch Failed', reason, 3000);
     }
   };
 
-  // 签名转账交易（仅签名，不提交）
+  // Sign transfer transaction (sign only, do not submit)
   const signTransferTransaction = async () => {
     try {
       setError('');
       setIsSigning(true);
 
       if (!account) {
-        throw new Error('请先连接钱包');
+        throw new Error('Please connect wallet first');
       }
 
       const { authenticator, rawTransaction } = await signTransaction({
@@ -180,23 +184,23 @@ function App() {
 
       setLastTransaction(transactionData);
       setTransactionHistory(prev => [transactionData, ...prev]);
-      setStatus(`转账交易已签名！签名: ${JSON.stringify(authenticator).slice(0, 50)}...`);
+      showSuccess('Transaction Signed Successfully', 'Transfer transaction signed, waiting for submission', 3000);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      setError(reason);
+      showError('Signing Failed', reason, 4000);
     } finally {
       setIsSigning(false);
     }
   };
 
-  // 签名并提交转账交易
+  // Sign and submit transfer transaction
   const submitTransferTransaction = async () => {
     try {
       setError('');
       setIsSigning(true);
 
       if (!account) {
-        throw new Error('请先连接钱包');
+        throw new Error('Please connect wallet first');
       }
 
       const { authenticator, rawTransaction } = await signTransaction({
@@ -230,24 +234,24 @@ function App() {
 
       setLastTransaction(transactionData);
       setTransactionHistory(prev => [transactionData, ...prev]);
-      setStatus(`转账交易已提交！交易哈希: ${response.hash}`);
+      showSuccess('Transaction Submitted Successfully', `Transaction Hash: ${response.hash}`, 4000);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      setError(reason);
+      showError('Transaction Submission Failed', reason, 4000);
     } finally {
       setIsSigning(false);
     }
   };
 
 
-  // 消息签名
+  // Message signing
   const signMessageAction = async () => {
     try {
       setError('');
       setIsSigning(true);
 
       if (!account) {
-        throw new Error('请先连接钱包');
+        throw new Error('Please connect wallet first');
       }
 
       const signature = await signMessage({
@@ -264,10 +268,10 @@ function App() {
 
       setLastTransaction(messageData);
       setTransactionHistory(prev => [messageData, ...prev]);
-      setStatus(`消息签名完成！签名: ${JSON.stringify(signature).slice(0, 50)}...`);
+      showSuccess('Message Signed Successfully', 'Message has been signed successfully', 3000);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      setError(reason);
+      showError('Message Signing Failed', reason, 4000);
     } finally {
       setIsSigning(false);
     }
@@ -279,7 +283,7 @@ function App() {
       setIsSigning(true);
 
       if (!account) {
-        throw new Error('请先连接钱包');
+        throw new Error('Please connect wallet first');
       }
 
       const nonce = crypto.randomUUID().replaceAll("-", "");
@@ -298,27 +302,27 @@ function App() {
 
       setLastTransaction(messageData);
       setTransactionHistory(prev => [messageData, ...prev]);
-      setStatus(`消息签名并验证完成！签名: ${JSON.stringify(signature).slice(0, 50)}...`);
+      showSuccess('Signature Verification Successful', 'Message has been signed and verified', 3000);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      setError(reason);
+      showError('Signature Verification Failed', reason, 4000);
     } finally {
       setIsSigning(false);
     }
   };
 
 
-  // 自定义交易（调用合约函数）
+  // Custom transaction (call contract function)
   const signCustomTransaction = async () => {
     try {
       setError('');
       setIsSigning(true);
 
       if (!account) {
-        throw new Error('请先连接钱包');
+        throw new Error('Please connect wallet first');
       }
 
-      // 过滤空的泛型参数和函数参数
+      // Filter empty generic parameters and function arguments
       const validGenericParams = customGenericParams.filter(param => param.trim() !== '');
       const validArguments = customArguments.filter(arg => arg.trim() !== '');
 
@@ -354,11 +358,11 @@ function App() {
 
       setLastTransaction(customData);
       setTransactionHistory(prev => [customData, ...prev]);
-      setStatus(`自定义交易已提交！交易哈希: ${response.hash}`);
+      showSuccess('Custom Transaction Successful', `Transaction Hash: ${response.hash}`, 4000);
       console.log(response)
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      setError(reason);
+      showError('Custom Transaction Failed', reason, 4000);
     } finally {
       setIsSigning(false);
     }
@@ -428,7 +432,24 @@ function App() {
                 <div className="space-y-4">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
-                      <span className="text-white font-bold">{wallet.name.charAt(0)}</span>
+                      {wallet.icon ? (
+                        <img 
+                          src={wallet.icon} 
+                          alt={wallet.name} 
+                          className="w-8 h-8 rounded"
+                          onError={(e) => {
+                            // If image loading fails, show first letter
+                            e.currentTarget.style.display = 'none';
+                            const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
+                            if (nextElement) {
+                              nextElement.style.display = 'block';
+                            }
+                          }}
+                        />
+                      ) : null}
+                      <span className="text-white font-bold" style={{ display: wallet.icon ? 'none' : 'block' }}>
+                        {wallet.name.charAt(0)}
+                      </span>
                     </div>
                     <div>
                       <p className="font-medium text-gray-900">{wallet.name}</p>
@@ -455,10 +476,6 @@ function App() {
                   
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <p className="text-gray-500">Chain ID</p>
-                      <p className="font-mono">{network?.chainId ?? 'N/A'}</p>
-                    </div>
-                    <div>
                       <p className="text-gray-500">Network</p>
                       <p className="truncate">{Object.values(APTOS_NETWORKS).find(network => network.network === selectedAptosNetwork)?.name || 'Unknown'}</p>
                     </div>
@@ -474,12 +491,20 @@ function App() {
               ) : (
                 <div className="text-center py-8">
                   <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
+                    
+                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    
                   </div>
                   <p className="text-gray-500">No wallet connected</p>
                   <p className="text-sm text-gray-400 mt-1">Connect a wallet to get started</p>
+                  {wallet?.url && (
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-400">Wallet URL:</p>
+                      <code className="text-xs text-blue-600 break-all">{wallet.url}</code>
+                    </div>
+                  )}
                 </div>
               )}
               
@@ -883,31 +908,57 @@ const response = await aptosClient.transaction.submit.simple({
 
       {/* Transaction Details Modal */}
       {showTransactionModal && selectedTransaction && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Transaction Details</h2>
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowTransactionModal(false)}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden border border-gray-200/50"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-6 border-b border-gray-200/60 bg-gradient-to-r from-gray-50 to-white">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Transaction Details</h2>
+                  <p className="text-sm text-gray-500">View transaction information and data</p>
+                </div>
+              </div>
               <button
                 onClick={() => setShowTransactionModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="w-10 h-10 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-all duration-200 flex items-center justify-center"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
             
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                  <div className="flex items-center space-x-2">
-                    <span className={`px-2 py-1 rounded text-sm font-medium ${
-                      selectedTransaction.type === 'transfer_sign' ? 'bg-green-100 text-green-800' : 
-                      selectedTransaction.type === 'transfer_submit' ? 'bg-orange-100 text-orange-800' : 
-                      selectedTransaction.type === 'message' ? 'bg-blue-100 text-blue-800' : 
-                      selectedTransaction.type === 'sign_verify' ? 'bg-indigo-100 text-indigo-800' : 
-                      selectedTransaction.type === 'custom' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'
+            <div className="p-6 overflow-y-auto max-h-[60vh] bg-gray-50/30">
+              <div className="space-y-6">
+                <div className="bg-white rounded-xl p-4 border border-gray-200/60 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-semibold text-gray-700 flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <span>Transaction Type</span>
+                    </label>
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                      {new Date(selectedTransaction.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <span className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                      selectedTransaction.type === 'transfer_sign' ? 'bg-green-100 text-green-800 border border-green-200' : 
+                      selectedTransaction.type === 'transfer_submit' ? 'bg-orange-100 text-orange-800 border border-orange-200' : 
+                      selectedTransaction.type === 'message' ? 'bg-blue-100 text-blue-800 border border-blue-200' : 
+                      selectedTransaction.type === 'sign_verify' ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' : 
+                      selectedTransaction.type === 'custom' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-gray-100 text-gray-800 border border-gray-200'
                     }`}>
                       {selectedTransaction.type === 'transfer_sign' ? 'Transfer Sign' : 
                        selectedTransaction.type === 'transfer_submit' ? 'Transfer Submit' : 
@@ -915,58 +966,79 @@ const response = await aptosClient.transaction.submit.simple({
                        selectedTransaction.type === 'sign_verify' ? 'Sign & Verify' : 
                        selectedTransaction.type === 'custom' ? 'Custom Transaction' : 'Unknown'}
                     </span>
-                    <span className="text-sm text-gray-500">
-                      {new Date(selectedTransaction.timestamp).toLocaleString()}
-                    </span>
                   </div>
                 </div>
 
                 {selectedTransaction.hash && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Hash</label>
-                    <div className="flex items-center space-x-2">
-                      <code className="flex-1 p-2 bg-gray-100 rounded text-sm font-mono break-all">
+                  <div className="bg-white rounded-xl p-4 border border-gray-200/60 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-sm font-semibold text-gray-700 flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span>Transaction Hash</span>
+                      </label>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <code className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono break-all text-gray-800">
                         {selectedTransaction.hash}
                       </code>
                       <button
                         onClick={() => copyToClipboard(selectedTransaction.hash, 'Transaction Hash')}
-                        className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors duration-200 flex items-center space-x-2"
                       >
-                        Copy
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <span>Copy</span>
                       </button>
                     </div>
                   </div>
                 )}
 
                 {selectedTransaction.signature && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Signature</label>
-                    <div className="flex items-center space-x-2">
-                      <code className="flex-1 p-2 bg-gray-100 rounded text-sm font-mono break-all max-h-32 overflow-y-auto">
+                  <div className="bg-white rounded-xl p-4 border border-gray-200/60 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-sm font-semibold text-gray-700 flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                        <span>Signature</span>
+                      </label>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <code className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono break-all max-h-32 overflow-y-auto text-gray-800">
                         {JSON.stringify(selectedTransaction.signature, null, 2)}
                       </code>
                       <button
                         onClick={() => copyToClipboard(JSON.stringify(selectedTransaction.signature), 'Signature')}
-                        className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors duration-200 flex items-center space-x-2"
                       >
-                        Copy
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <span>Copy</span>
                       </button>
                     </div>
                   </div>
                 )}
 
                 {selectedTransaction.message && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                    <div className="flex items-center space-x-2">
-                      <code className="flex-1 p-2 bg-gray-100 rounded text-sm break-all">
+                  <div className="bg-white rounded-xl p-4 border border-gray-200/60 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-sm font-semibold text-gray-700 flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                        <span>Message</span>
+                      </label>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <code className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm break-all text-gray-800">
                         {selectedTransaction.message}
                       </code>
                       <button
                         onClick={() => copyToClipboard(selectedTransaction.message, 'Message')}
-                        className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors duration-200 flex items-center space-x-2"
                       >
-                        Copy
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <span>Copy</span>
                       </button>
                     </div>
                   </div>
@@ -1075,17 +1147,25 @@ const response = await aptosClient.transaction.submit.simple({
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Raw Data</label>
-                  <div className="flex items-center space-x-2">
-                    <code className="flex-1 p-2 bg-gray-100 rounded text-sm font-mono break-all max-h-32 overflow-y-auto">
+                <div className="bg-white rounded-xl p-4 border border-gray-200/60 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-semibold text-gray-700 flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
+                      <span>Raw Data</span>
+                    </label>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <code className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono break-all max-h-32 overflow-y-auto text-gray-800">
                       {JSON.stringify(selectedTransaction, null, 2)}
                     </code>
                     <button
                       onClick={() => copyToClipboard(JSON.stringify(selectedTransaction, null, 2), 'Raw Data')}
-                      className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors duration-200 flex items-center space-x-2"
                     >
-                      Copy All
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      <span>Copy All</span>
                     </button>
                   </div>
                 </div>
@@ -1094,6 +1174,9 @@ const response = await aptosClient.transaction.submit.simple({
           </div>
         </div>
       )}
+
+      {/* Toast Container */}
+      <ToastContainer toasts={toasts} onRemoveToast={removeToast} />
     </div>
   );
 }

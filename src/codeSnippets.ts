@@ -2,7 +2,7 @@ export const connectWalletSnippet = `const provider = new ethers.BrowserProvider
 const accounts = await provider.send('eth_requestAccounts', []);
 const signer = await provider.getSigner();`;
 
-export const signTextSnippet = `const message = '欢迎使用链上签名教学示例';
+export const signTextSnippet = `const message = 'Welcome to On-Chain Signature Tutorial Example';
 const signature = await signer.signMessage(message);
 const recovered = ethers.verifyMessage(message, signature);`;
 
@@ -23,7 +23,7 @@ const types = {
 
 const value = {
   user: account,
-  action: '点击了结构化数据签名',
+  action: 'Clicked structured data signature',
   timestamp: BigInt(Date.now()),
 };
 

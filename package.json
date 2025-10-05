@@ -16,7 +16,6 @@
     "@aptos-labs/wallet-adapter-core": "^7.4.0",
     "@aptos-labs/wallet-adapter-react": "^7.1.0",
     "@aptos-labs/wallet-standard": "^0.5.2",
-    "ethers": "6.15.0",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },

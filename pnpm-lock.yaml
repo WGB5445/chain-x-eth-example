@@ -26,9 +26,6 @@ importers:
       '@aptos-labs/wallet-standard':
         specifier: ^0.5.2
         version: 0.5.2(@aptos-labs/ts-sdk@5.1.0(got@11.8.6))(@wallet-standard/core@1.1.1)
-      ethers:
-        specifier: 6.15.0
-        version: 6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       react:
         specifier: 19.2.0
         version: 19.2.0

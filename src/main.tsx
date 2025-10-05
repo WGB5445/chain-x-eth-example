@@ -8,7 +8,7 @@ import { setupAutomaticSolanaWalletDerivation } from "@aptos-labs/derived-wallet
 import { PropsWithChildren } from "react";
 import { Network, Aptos, AptosConfig } from "@aptos-labs/ts-sdk";
 
-// 创建网络上下文
+// Create network context
 interface NetworkContextType {
   selectedAptosNetwork: Network;
   setSelectedAptosNetwork: (network: Network) => void;
@@ -74,12 +74,12 @@ const WalletProvider = ({ children }: PropsWithChildren) => {
 
 
 
-// 从 localStorage 读取网络设置
+// Read network settings from localStorage
 const getStoredNetwork = (): Network => {
   try {
     const stored = localStorage.getItem('aptos-network');
     if (stored) {
-      // 验证存储的值是否为有效的网络类型
+      // Verify if stored value is a valid network type
       const validNetworks = [Network.DEVNET, Network.TESTNET, Network.MAINNET];
       const networkValue = stored as Network;
       if (validNetworks.includes(networkValue)) {
@@ -92,7 +92,7 @@ const getStoredNetwork = (): Network => {
   return Network.TESTNET;
 };
 
-// 保存网络设置到 localStorage
+// Save network settings to localStorage
 const saveNetworkToStorage = (network: Network) => {
   try {
     localStorage.setItem('aptos-network', network);
@@ -101,24 +101,24 @@ const saveNetworkToStorage = (network: Network) => {
   }
 };
 
-// 根据网络创建 Aptos client
+// Create Aptos client based on network
 const createAptosClient = (network: Network): Aptos => {
   const config = new AptosConfig({ network });
   return new Aptos(config);
 };
 
-// 网络提供者组件
+// Network provider component
 const NetworkProvider = ({ children }: PropsWithChildren) => {
   const [selectedAptosNetwork, setSelectedAptosNetwork] = useState<Network>(getStoredNetwork);
   const [aptosClient, setAptosClient] = useState<Aptos>(() => createAptosClient(getStoredNetwork()));
 
-  // 当网络改变时，重新创建 Aptos client
+  // When network changes, recreate Aptos client
   useEffect(() => {
     const newClient = createAptosClient(selectedAptosNetwork);
     setAptosClient(newClient);
   }, [selectedAptosNetwork]);
 
-  // 包装 setSelectedAptosNetwork 以同时保存到 localStorage
+  // Wrap setSelectedAptosNetwork to also save to localStorage
   const handleSetSelectedAptosNetwork = (network: Network) => {
     setSelectedAptosNetwork(network);
     saveNetworkToStorage(network);
