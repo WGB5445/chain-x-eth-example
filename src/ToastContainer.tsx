@@ -16,7 +16,7 @@ interface ToastContainerProps {
 
 const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onRemoveToast }) => {
   return (
-    <div className="fixed top-4 right-4 z-[9999] space-y-2 max-w-sm w-full">
+    <div className="fixed top-4 inset-x-4 z-[9999] w-auto max-w-md mx-auto space-y-2 sm:inset-auto sm:right-4 sm:left-auto sm:mx-0 sm:w-full sm:max-w-sm">
       {toasts.map((toast) => (
         <Toast
           key={toast.id}

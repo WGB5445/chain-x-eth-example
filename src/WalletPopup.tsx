@@ -22,6 +22,7 @@ const WalletPopup: React.FC<WalletPopupProps> = ({
 }) => {
   const [isConnecting, setIsConnecting] = useState<string | null>(null);
   const {connect, connected, wallet} = useWallet();
+  const dialogTitleId = 'wallet-popup-title';
 
   const handleWalletConnect = async (walletToConnect: AdapterWallet) => {
     try {
@@ -65,17 +66,23 @@ const WalletPopup: React.FC<WalletPopupProps> = ({
     >
       <div 
         className="wallet-popup" 
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={dialogTitleId}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="wallet-popup-header">
-          <h2>Select Wallet</h2>
+          <h2 id={dialogTitleId}>Select Wallet</h2>
           <button className="wallet-popup-close" onClick={onClose}>
             ×
           </button>
         </div>
         
         <div className="wallet-popup-content">
+          <p className="mb-6 text-sm leading-relaxed text-slate-500">
+            Choose an Ethereum wallet to derive an Aptos address instantly. Installed wallets appear first, and you can install new options below.
+          </p>
           {wallets.length > 0 && (
             <div className="wallet-section">
               <h3>Installed Wallets</h3>

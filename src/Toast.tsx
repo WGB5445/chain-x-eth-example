@@ -36,7 +36,7 @@ const Toast: React.FC<ToastProps> = ({ id, type, title, message, duration = 4000
   };
 
   const getToastStyles = () => {
-    const baseStyles = "relative overflow-hidden rounded-xl shadow-lg border transition-all duration-300 transform";
+    const baseStyles = "relative overflow-hidden rounded-xl shadow-lg border transition-all duration-300 transform w-full min-w-0 pointer-events-auto";
     
     switch (type) {
       case 'success':
