@@ -1081,7 +1081,7 @@ const response = await aptosClient.transaction.submit.simple({
                     : 'bg-white/80 text-slate-600 backdrop-blur'
                 }`}
               >
-                <span className="text-[11px] uppercase tracking-[0.25em] text-slate-400">Step {tab.step}</span>
+                <span className="text-[11px] uppercase tracking-[0.25em] text-slate-400">Example {tab.step}</span>
                 <span className="mt-2 block text-base font-semibold">{tab.label}</span>
                 <span className="mt-1 block text-xs leading-relaxed text-slate-500">{tab.description}</span>
               </button>
