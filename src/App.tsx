@@ -192,6 +192,11 @@ function App() {
   // Transaction status tracking
   const [signatureInfo, setSignatureInfo] = useState<SignatureInfo | null>(null);
   const [transactionStatus, setTransactionStatus] = useState<TransactionStatusInfo | null>(null);
+  
+  // Balance and faucet states
+  const [balance, setBalance] = useState<string>('0');
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  const [isFaucetLoading, setIsFaucetLoading] = useState(false);
 
   const mobileActionTabs = [
     {
@@ -253,6 +258,85 @@ function App() {
   useEffect(() => {
     setupAutomaticEthereumWalletDerivation({ defaultNetwork: selectedAptosNetwork });
   }, [selectedAptosNetwork]);
+
+  // Fetch balance function
+  const fetchBalance = async () => {
+    if (!account?.address) {
+      setBalance('0');
+      return;
+    }
+
+    try {
+      setIsLoadingBalance(true);
+      const balance = await aptosClient.getAccountAPTAmount({
+        accountAddress: account.address.toString()
+      });
+      setBalance(balance.toString());
+    } catch (error) {
+      console.error('Failed to fetch balance:', error);
+      setBalance('0');
+    } finally {
+      setIsLoadingBalance(false);
+    }
+  };
+
+  // Fetch balance when account or network changes
+  useEffect(() => {
+    if (connected && account) {
+      fetchBalance();
+    } else {
+      setBalance('0');
+    }
+  }, [connected, account, selectedAptosNetwork]);
+
+  // Auto-refresh balance every 5 seconds
+  useEffect(() => {
+    if (!connected || !account) return;
+
+    const interval = setInterval(fetchBalance, 5000);
+    return () => clearInterval(interval);
+  }, [connected, account, selectedAptosNetwork]);
+
+  // Faucet functions
+  const handleDevnetFaucet = async () => {
+    if (!account?.address) return;
+
+    try {
+      setIsFaucetLoading(true);
+      const faucetUrl = 'https://faucet.devnet.aptoslabs.com/fund';
+      const response = await fetch(faucetUrl, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json, text/plain, */*',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          address: account.address.toString(),
+          amount: 50000000, // 0.5 APT in micro APT
+        }),
+      });
+
+      if (response.ok) {
+        showSuccess('Faucet Success', '0.5 APT has been added to your account', 3000);
+        // Refresh balance after successful faucet
+        setTimeout(fetchBalance, 2000);
+      } else {
+        throw new Error('Faucet request failed');
+      }
+    } catch (error) {
+      console.error('Faucet failed:', error);
+      showError('Faucet Failed', 'Unable to get tokens from faucet', 3000);
+    } finally {
+      setIsFaucetLoading(false);
+    }
+  };
+
+  const handleTestnetFaucet = () => {
+    if (!account?.address) return;
+    
+    const faucetUrl = `https://aptos.dev/network/faucet?address=${account.address.toString()}`;
+    window.open(faucetUrl, '_blank');
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.innerWidth > 767) {
@@ -686,7 +770,42 @@ function App() {
               <p className="text-gray-500">Network</p>
               <p className="truncate">{Object.values(APTOS_NETWORKS).find((network) => network.network === selectedAptosNetwork)?.name || 'Unknown'}</p>
             </div>
+            <div>
+              <p className="text-gray-500">Balance</p>
+              <div className="flex items-center space-x-2">
+                {isLoadingBalance ? (
+                  <div className="flex items-center space-x-1">
+                    <div className="w-3 h-3 border border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+                    <span className="text-xs text-gray-400">Loading...</span>
+                  </div>
+                ) : (
+                  <p className="font-mono text-sm">
+                    {(parseFloat(balance) / 100000000).toFixed(4)} APT
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
+
+          {/* Faucet buttons */}
+          {selectedAptosNetwork === Network.DEVNET && (
+            <button
+              onClick={handleDevnetFaucet}
+              disabled={isFaucetLoading}
+              className="w-full px-4 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isFaucetLoading ? 'Getting Tokens...' : 'Get 0.5 APT (Devnet)'}
+            </button>
+          )}
+
+          {selectedAptosNetwork === Network.TESTNET && (
+            <button
+              onClick={handleTestnetFaucet}
+              className="w-full px-4 py-2 text-sm text-green-600 border border-green-200 rounded-lg hover:bg-green-50 transition-colors"
+            >
+              Get Testnet APT
+            </button>
+          )}
 
           <button
             onClick={handleWalletDisconnect}
