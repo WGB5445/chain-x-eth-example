@@ -16,8 +16,10 @@
     "@aptos-labs/wallet-adapter-core": "^7.4.0",
     "@aptos-labs/wallet-adapter-react": "^7.1.0",
     "@aptos-labs/wallet-standard": "^0.5.2",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "react-syntax-highlighter": "^15.6.6"
   },
   "devDependencies": {
     "@eslint/js": "9.36.0",

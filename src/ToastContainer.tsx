@@ -16,17 +16,26 @@ interface ToastContainerProps {
 
 const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onRemoveToast }) => {
   return (
-    <div className="fixed top-4 inset-x-4 z-[9999] w-auto max-w-md mx-auto space-y-2 sm:inset-auto sm:right-4 sm:left-auto sm:mx-0 sm:w-full sm:max-w-sm">
-      {toasts.map((toast) => (
-        <Toast
+    <div className="fixed top-4 right-4 z-[9999] w-auto max-w-sm space-y-3 pointer-events-none">
+      {toasts.map((toast, index) => (
+        <div
           key={toast.id}
-          id={toast.id}
-          type={toast.type}
-          title={toast.title}
-          message={toast.message}
-          duration={toast.duration}
-          onClose={onRemoveToast}
-        />
+          className="transform transition-all duration-300 ease-out pointer-events-auto"
+          style={{
+            transform: `translateY(${index * 4}px)`,
+            zIndex: 9999 - index,
+            maxHeight: '80vh',
+          }}
+        >
+          <Toast
+            id={toast.id}
+            type={toast.type}
+            title={toast.title}
+            message={toast.message}
+            duration={toast.duration}
+            onClose={onRemoveToast}
+          />
+        </div>
       ))}
     </div>
   );

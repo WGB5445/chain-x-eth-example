@@ -12,10 +12,11 @@ export interface ToastProps {
 const Toast: React.FC<ToastProps> = ({ id, type, title, message, duration = 4000, onClose }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
-    // Enter animation
-    const enterTimer = setTimeout(() => setIsVisible(true), 10);
+    // Enter animation with slight delay for better visual effect
+    const enterTimer = setTimeout(() => setIsVisible(true), 50);
     
     // Auto close
     const closeTimer = setTimeout(() => {
@@ -36,18 +37,18 @@ const Toast: React.FC<ToastProps> = ({ id, type, title, message, duration = 4000
   };
 
   const getToastStyles = () => {
-    const baseStyles = "relative overflow-hidden rounded-xl shadow-lg border transition-all duration-300 transform w-full min-w-0 pointer-events-auto";
+    const baseStyles = "relative overflow-hidden rounded-lg shadow-xl border transition-all duration-300 transform w-full min-w-0 max-w-sm pointer-events-auto backdrop-blur-sm";
     
     switch (type) {
       case 'success':
-        return `${baseStyles} bg-green-50 border-green-200 text-green-800`;
+        return `${baseStyles} bg-white border-green-200 text-green-800`;
       case 'error':
-        return `${baseStyles} bg-red-50 border-red-200 text-red-800`;
+        return `${baseStyles} bg-white border-red-200 text-red-800`;
       case 'warning':
-        return `${baseStyles} bg-yellow-50 border-yellow-200 text-yellow-800`;
+        return `${baseStyles} bg-white border-yellow-200 text-yellow-800`;
       case 'info':
       default:
-        return `${baseStyles} bg-blue-50 border-blue-200 text-blue-800`;
+        return `${baseStyles} bg-white border-blue-200 text-blue-800`;
     }
   };
 
@@ -85,22 +86,37 @@ const Toast: React.FC<ToastProps> = ({ id, type, title, message, duration = 4000
     <div
       className={`${getToastStyles()} ${
         isVisible && !isLeaving 
-          ? 'translate-x-0 opacity-100' 
-          : 'translate-x-full opacity-0'
+          ? 'translate-x-0 opacity-100 scale-100' 
+          : 'translate-x-full opacity-0 scale-95'
       }`}
       style={{
-        transform: isVisible && !isLeaving ? 'translateX(0)' : 'translateX(100%)',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        transform: isVisible && !isLeaving ? 'translateX(0) scale(1)' : 'translateX(100%) scale(0.95)',
+        transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+        boxShadow: '0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05)',
       }}
     >
       <div className="flex items-start p-4">
         <div className="flex-shrink-0">
           {getIcon()}
         </div>
-        <div className="ml-3 flex-1">
-          <h3 className="text-sm font-semibold">{title}</h3>
+        <div className="ml-3 flex-1 min-w-0">
+          <h3 className="text-sm font-semibold break-words">{title}</h3>
           {message && (
-            <p className="mt-1 text-sm opacity-90">{message}</p>
+            <div className="mt-1">
+              <p className={`text-sm opacity-90 break-words leading-relaxed transition-all duration-300 ${
+                isExpanded ? 'max-h-96 overflow-y-auto' : 'max-h-16 overflow-hidden'
+              }`}>
+                {message}
+              </p>
+              {message.length > 100 && (
+                <button
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="mt-1 text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                >
+                  {isExpanded ? 'Show less' : 'Show more'}
+                </button>
+              )}
+            </div>
           )}
         </div>
         <div className="ml-4 flex-shrink-0">

@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Deserializer, Network, SimpleTransaction } from '@aptos-labs/ts-sdk';
-import { useAptosClient, useNetworkContext } from './main';
+import { useAptosClient, useNetworkContext } from './contexts/NetworkContext';
 import { useWallet } from '@aptos-labs/wallet-adapter-react';
 import WalletPopup from './WalletPopup';
 import { setupAutomaticEthereumWalletDerivation } from '@aptos-labs/derived-wallet-ethereum';
 import ToastContainer from './ToastContainer';
 import { useToast } from './useToast';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 
 // Aptos Network Configuration
@@ -28,11 +30,145 @@ const APTOS_NETWORKS = {
 } as const;
 
 type AptosNetworkType = keyof typeof APTOS_NETWORKS;
+type MobileActionId = 'sign-message' | 'sign-transaction' | 'custom-transaction';
 
-const fallbackVerifyingContract = '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC';
+type MessageSignatureInfo = {
+  type: 'message';
+  message: string;
+  signature: unknown;
+  timestamp: string;
+};
+
+type VerifiedMessageSignatureInfo = {
+  type: 'sign_verify';
+  message: string;
+  signature: unknown;
+  nonce: string;
+  timestamp: string;
+};
+
+type TransferSignatureInfo = {
+  type: 'transfer_sign';
+  amount: string;
+  recipient: string;
+  authenticator: unknown;
+  rawTransaction: unknown;
+  timestamp: string;
+};
+
+type CustomSignatureInfo = {
+  type: 'custom_sign';
+  function: string;
+  typeArguments: string[];
+  arguments: string[];
+  maxGas: string;
+  gasPrice: string;
+  authenticator: unknown;
+  rawTransaction: unknown;
+  timestamp: string;
+};
+
+type SignatureInfo =
+  | MessageSignatureInfo
+  | VerifiedMessageSignatureInfo
+  | TransferSignatureInfo
+  | CustomSignatureInfo;
+
+type TransferTransactionStatus = {
+  type: 'transfer_submit';
+  hash: string;
+  amount: string;
+  recipient: string;
+  status: string;
+  timestamp: string;
+};
+
+type CustomTransactionStatus = {
+  type: 'custom';
+  hash: string;
+  function: string;
+  typeArguments: string[];
+  arguments: string[];
+  maxGas: string;
+  gasPrice: string;
+  status: string;
+  timestamp: string;
+};
+
+type TransactionStatusInfo = TransferTransactionStatus | CustomTransactionStatus;
+
+type ThemeKey = 'blue' | 'green' | 'purple';
+
+type ThemeConfig = {
+  container: string;
+  heading: string;
+  label: string;
+  text: string;
+  pill: string;
+  codeBg: string;
+  button: string;
+};
+
+const themeStyles: Record<ThemeKey, ThemeConfig> = {
+  blue: {
+    container: 'bg-blue-50 border border-blue-200',
+    heading: 'text-blue-800',
+    label: 'text-blue-700',
+    text: 'text-blue-800',
+    pill: 'text-blue-600 bg-blue-100',
+    codeBg: 'bg-blue-100',
+    button: 'text-blue-600 hover:text-blue-800 hover:bg-blue-100'
+  },
+  green: {
+    container: 'bg-green-50 border border-green-200',
+    heading: 'text-green-800',
+    label: 'text-green-700',
+    text: 'text-green-800',
+    pill: 'text-green-600 bg-green-100',
+    codeBg: 'bg-green-100',
+    button: 'text-green-600 hover:text-green-800 hover:bg-green-100'
+  },
+  purple: {
+    container: 'bg-purple-50 border border-purple-200',
+    heading: 'text-purple-800',
+    label: 'text-purple-700',
+    text: 'text-purple-800',
+    pill: 'text-purple-600 bg-purple-100',
+    codeBg: 'bg-purple-100',
+    button: 'text-purple-600 hover:text-purple-800 hover:bg-purple-100'
+  }
+};
+
+const signatureMeta: Record<SignatureInfo['type'], { title: string; theme: ThemeKey }> = {
+  message: { title: 'Message Signature', theme: 'blue' },
+  sign_verify: { title: 'Message Signature & Verification', theme: 'blue' },
+  transfer_sign: { title: 'Transaction Signature', theme: 'blue' },
+  custom_sign: { title: 'Custom Transaction Signature', theme: 'purple' }
+};
+
+const transactionStatusMeta: Record<TransactionStatusInfo['type'], { title: string; theme: ThemeKey }> = {
+  transfer_submit: { title: 'Transfer Transaction Status', theme: 'green' },
+  custom: { title: 'Custom Transaction Status', theme: 'purple' }
+};
 
 const formatAddress = (value: string | null | undefined) =>
   value ? `${value.slice(0, 6)}...${value.slice(-4)}` : 'Not Connected';
+
+const safeStringify = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    console.warn('Failed to stringify value', error);
+    return String(value);
+  }
+};
+
+const truncate = (value: string, length = 60): string =>
+  value.length > length ? `${value.slice(0, length)}...` : value;
+
 
 
 function App() {
@@ -44,7 +180,6 @@ function App() {
   const [transferAmount, setTransferAmount] = useState<string>('1000');
   const [transferRecipient, setTransferRecipient] = useState<string>('0x1');
   const [message, setMessage] = useState('Hello Aptos!');
-  const [status, setStatus] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [isSigning, setIsSigning] = useState(false);
   const [lastTransaction, setLastTransaction] = useState<any>(null);
@@ -52,7 +187,11 @@ function App() {
   const [showWalletPopup, setShowWalletPopup] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
-  const [activeMobileAction, setActiveMobileAction] = useState<'sign-message' | 'sign-transaction' | 'custom-transaction'>('sign-message');
+  const [activeMobileAction, setActiveMobileAction] = useState<MobileActionId>('custom-transaction');
+  
+  // Transaction status tracking
+  const [signatureInfo, setSignatureInfo] = useState<SignatureInfo | null>(null);
+  const [transactionStatus, setTransactionStatus] = useState<TransactionStatusInfo | null>(null);
 
   const mobileActionTabs = [
     {
@@ -96,9 +235,32 @@ function App() {
   const currentNetworkKey = (currentNetworkEntry?.[0] ?? 'testnet') as AptosNetworkType;
   const currentNetworkLabel = currentNetworkEntry?.[1].name ?? APTOS_NETWORKS.testnet.name;
 
+  // Get network explorer URL
+  const getExplorerUrl = (hash: string) => {
+    const networkName = currentNetworkKey;
+    switch (networkName) {
+      case 'devnet':
+        return `https://explorer.aptoslabs.com/txn/${hash}?network=devnet`;
+      case 'testnet':
+        return `https://explorer.aptoslabs.com/txn/${hash}?network=testnet`;
+      case 'mainnet':
+        return `https://explorer.aptoslabs.com/txn/${hash}?network=mainnet`;
+      default:
+        return `https://explorer.aptoslabs.com/txn/${hash}`;
+    }
+  };
+
   useEffect(() => {
     setupAutomaticEthereumWalletDerivation({ defaultNetwork: selectedAptosNetwork });
   }, [selectedAptosNetwork]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth > 767) {
+      return;
+    }
+    setSignatureInfo(null);
+    setTransactionStatus(null);
+  }, [activeMobileAction]);
 
   const handleWalletConnect = (walletName: string, address: string) => {
     showSuccess('Wallet Connected Successfully', `${walletName} connected: ${formatAddress(address)}`, 3000);
@@ -186,6 +348,9 @@ function App() {
     try {
       setError('');
       setIsSigning(true);
+      // Clear previous states
+      setSignatureInfo(null);
+      setTransactionStatus(null);
 
       if (!account) {
         throw new Error('Please connect wallet first');
@@ -218,7 +383,15 @@ function App() {
 
       setLastTransaction(transactionData);
       setTransactionHistory(prev => [transactionData, ...prev]);
-      showSuccess('Transaction Signed Successfully', 'Transfer transaction signed, waiting for submission', 3000);
+      setSignatureInfo({
+        type: 'transfer_sign',
+        authenticator: authenticator,
+        rawTransaction: rawTransaction,
+        amount: transferAmount,
+        recipient: transferRecipient,
+        timestamp: new Date().toISOString()
+      });
+      showSuccess('Transaction Signed Successfully', 'Transfer transaction signed, You can check the signature result.', 3000);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       showError('Signing Failed', reason, 4000);
@@ -232,6 +405,9 @@ function App() {
     try {
       setError('');
       setIsSigning(true);
+      // Clear previous states
+      setSignatureInfo(null);
+      setTransactionStatus(null);
 
       if (!account) {
         throw new Error('Please connect wallet first');
@@ -268,7 +444,15 @@ function App() {
 
       setLastTransaction(transactionData);
       setTransactionHistory(prev => [transactionData, ...prev]);
-      showSuccess('Transaction Submitted Successfully', `Transaction Hash: ${response.hash}`, 4000);
+      setTransactionStatus({
+        type: 'transfer_submit',
+        hash: response.hash,
+        amount: transferAmount,
+        recipient: transferRecipient,
+        status: 'submitted',
+        timestamp: new Date().toISOString()
+      });
+      showSuccess('Transaction Submitted Successfully', `Hash: ${response.hash.slice(0, 20)}...${response.hash.slice(-8)}`, 4000);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       showError('Transaction Submission Failed', reason, 4000);
@@ -283,6 +467,9 @@ function App() {
     try {
       setError('');
       setIsSigning(true);
+      // Clear previous states
+      setSignatureInfo(null);
+      setTransactionStatus(null);
 
       if (!account) {
         throw new Error('Please connect wallet first');
@@ -302,6 +489,12 @@ function App() {
 
       setLastTransaction(messageData);
       setTransactionHistory(prev => [messageData, ...prev]);
+      setSignatureInfo({
+        type: 'message',
+        message: message,
+        signature: signature,
+        timestamp: new Date().toISOString()
+      });
       showSuccess('Message Signed Successfully', 'Message has been signed successfully', 3000);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
@@ -315,6 +508,9 @@ function App() {
     try {
       setError('');
       setIsSigning(true);
+      // Clear previous states
+      setSignatureInfo(null);
+      setTransactionStatus(null);
 
       if (!account) {
         throw new Error('Please connect wallet first');
@@ -336,6 +532,13 @@ function App() {
 
       setLastTransaction(messageData);
       setTransactionHistory(prev => [messageData, ...prev]);
+      setSignatureInfo({
+        type: 'sign_verify',
+        message: message,
+        signature: signature,
+        nonce: nonce,
+        timestamp: new Date().toISOString()
+      });
       showSuccess('Signature Verification Successful', 'Message has been signed and verified', 3000);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
@@ -351,6 +554,9 @@ function App() {
     try {
       setError('');
       setIsSigning(true);
+      // Clear previous states
+      setSignatureInfo(null);
+      setTransactionStatus(null);
 
       if (!account) {
         throw new Error('Please connect wallet first');
@@ -374,6 +580,19 @@ function App() {
         }
       });
 
+      // Set signature info for custom transaction
+      setSignatureInfo({
+        type: 'custom_sign',
+        authenticator: authenticator,
+        rawTransaction: rawTransaction,
+        function: customFunction,
+        typeArguments: validGenericParams,
+        arguments: validArguments,
+        maxGas: customMaxGas,
+        gasPrice: customGasPrice,
+        timestamp: new Date().toISOString()
+      });
+
       const response = await aptosClient.transaction.submit.simple({
         transaction: SimpleTransaction.deserialize(new Deserializer(rawTransaction)),
         senderAuthenticator: authenticator
@@ -392,7 +611,18 @@ function App() {
 
       setLastTransaction(customData);
       setTransactionHistory(prev => [customData, ...prev]);
-      showSuccess('Custom Transaction Successful', `Transaction Hash: ${response.hash}`, 4000);
+      setTransactionStatus({
+        type: 'custom',
+        hash: response.hash,
+        function: customFunction,
+        typeArguments: validGenericParams,
+        arguments: validArguments,
+        maxGas: customMaxGas,
+        gasPrice: customGasPrice,
+        status: 'submitted',
+        timestamp: new Date().toISOString()
+      });
+      showSuccess('Custom Transaction Successful', `Hash: ${response.hash.slice(0, 20)}...${response.hash.slice(-8)}`, 4000);
       console.log(response)
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
@@ -480,12 +710,6 @@ function App() {
               <code className="text-xs text-blue-600 break-all">{wallet.url}</code>
             </div>
           )}
-        </div>
-      )}
-
-      {status && (
-        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-800 break-words overflow-wrap-anywhere">{status}</p>
         </div>
       )}
 
@@ -650,6 +874,350 @@ function App() {
     );
   };
 
+  const renderSignaturePanel = (allowedTypes: SignatureInfo['type'][]) => {
+    if (!signatureInfo || !allowedTypes.includes(signatureInfo.type)) {
+      return null;
+    }
+
+    const meta = signatureMeta[signatureInfo.type];
+    const theme = themeStyles[meta.theme];
+    const timestampLabel = new Date(signatureInfo.timestamp).toLocaleTimeString();
+
+    const renderCopyButton = (value: string, label: string) => (
+      <button
+        onClick={() => copyToClipboard(value, label)}
+        className={`p-2 ${theme.button} rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center`}
+        title={`Copy ${label}`}
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      </button>
+    );
+
+    const sections: ReactNode[] = [];
+
+    if ('message' in signatureInfo) {
+      sections.push(
+        <div key="message">
+          <label className={`text-xs font-medium ${theme.label}`}>Message:</label>
+          <p className={`text-sm ${theme.text} break-words`}>{signatureInfo.message}</p>
+        </div>
+      );
+    }
+
+    if ('amount' in signatureInfo) {
+      sections.push(
+        <div key="amount" className="flex items-center justify-between">
+          <span className={`text-sm font-medium ${theme.label}`}>Amount:</span>
+          <span className={`text-sm ${theme.text}`}>{signatureInfo.amount} micro APT</span>
+        </div>
+      );
+    }
+
+    if ('recipient' in signatureInfo) {
+      const recipientValue = signatureInfo.recipient;
+      sections.push(
+        <div key="recipient">
+          <label className={`text-xs font-medium ${theme.label}`}>Recipient:</label>
+          <div className="flex items-center space-x-2">
+            <code className={`flex-1 text-xs ${theme.text} break-all ${theme.codeBg} p-2 rounded`}>
+              {recipientValue}
+            </code>
+            {renderCopyButton(recipientValue, 'Recipient Address')}
+          </div>
+        </div>
+      );
+    }
+
+    if ('signature' in signatureInfo && signatureInfo.signature) {
+      const signatureString = safeStringify(signatureInfo.signature);
+      sections.push(
+        <div key="signature">
+          <label className={`text-xs font-medium ${theme.label}`}>Signature:</label>
+          <div className="flex items-center space-x-2">
+            <code className={`flex-1 text-xs ${theme.text} break-all ${theme.codeBg} p-2 rounded`}>
+              {truncate(signatureString)}
+            </code>
+            {renderCopyButton(signatureString, 'Signature')}
+          </div>
+        </div>
+      );
+    } else if ('authenticator' in signatureInfo && signatureInfo.authenticator) {
+      const authenticatorString = safeStringify(signatureInfo.authenticator);
+      sections.push(
+        <div key="authenticator">
+          <label className={`text-xs font-medium ${theme.label}`}>Authenticator:</label>
+          <div className="flex items-center space-x-2">
+            <code className={`flex-1 text-xs ${theme.text} break-all ${theme.codeBg} p-2 rounded`}>
+              {truncate(authenticatorString)}
+            </code>
+            {renderCopyButton(authenticatorString, 'Authenticator')}
+          </div>
+        </div>
+      );
+    }
+
+    if ('function' in signatureInfo && signatureInfo.function) {
+      sections.push(
+        <div key="function">
+          <label className={`text-xs font-medium ${theme.label}`}>Function:</label>
+          <code className={`block text-xs ${theme.text} break-all ${theme.codeBg} p-2 rounded mt-1`}>
+            {signatureInfo.function}
+          </code>
+        </div>
+      );
+    }
+
+    if ('typeArguments' in signatureInfo && signatureInfo.typeArguments.length) {
+      sections.push(
+        <div key="typeArguments">
+          <label className={`text-xs font-medium ${theme.label}`}>Type Arguments:</label>
+          <div className="space-y-1 mt-1">
+            {signatureInfo.typeArguments.map((arg, index) => (
+              <code
+                key={`${arg}-${index}`}
+                className={`block text-xs ${theme.text} break-all ${theme.codeBg} p-2 rounded`}
+              >
+                {arg}
+              </code>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if ('arguments' in signatureInfo && signatureInfo.arguments.length) {
+      sections.push(
+        <div key="arguments">
+          <label className={`text-xs font-medium ${theme.label}`}>Function Arguments:</label>
+          <div className="space-y-1 mt-1">
+            {signatureInfo.arguments.map((arg, index) => (
+              <code
+                key={`${arg}-${index}`}
+                className={`block text-xs ${theme.text} break-all ${theme.codeBg} p-2 rounded`}
+              >
+                {arg}
+              </code>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if ('maxGas' in signatureInfo) {
+      sections.push(
+        <div key="maxGas" className="flex items-center justify-between">
+          <span className={`text-sm font-medium ${theme.label}`}>Max Gas:</span>
+          <span className={`text-sm ${theme.text}`}>{signatureInfo.maxGas}</span>
+        </div>
+      );
+    }
+
+    if ('gasPrice' in signatureInfo) {
+      sections.push(
+        <div key="gasPrice" className="flex items-center justify-between">
+          <span className={`text-sm font-medium ${theme.label}`}>Gas Price:</span>
+          <span className={`text-sm ${theme.text}`}>{signatureInfo.gasPrice}</span>
+        </div>
+      );
+    }
+
+    if ('nonce' in signatureInfo) {
+      sections.push(
+        <div key="nonce">
+          <label className={`text-xs font-medium ${theme.label}`}>Nonce:</label>
+          <div className="flex items-center space-x-2">
+            <code className={`flex-1 text-xs ${theme.text} break-all ${theme.codeBg} p-2 rounded`}>
+              {signatureInfo.nonce}
+            </code>
+            {renderCopyButton(signatureInfo.nonce, 'Nonce')}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`mt-4 p-4 rounded-lg ${theme.container}`}>
+        <div className="flex items-center justify-between mb-3">
+          <h4 className={`text-sm font-semibold flex items-center ${theme.heading}`}>
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {meta.title}
+          </h4>
+          <span className={`text-xs ${theme.pill} px-2 py-1 rounded-full`}>{timestampLabel}</span>
+        </div>
+        <div className="space-y-2">{sections}</div>
+      </div>
+    );
+  };
+
+  const renderTransactionStatusPanel = (allowedTypes: TransactionStatusInfo['type'][]) => {
+    if (!transactionStatus || !allowedTypes.includes(transactionStatus.type)) {
+      return null;
+    }
+
+    const meta = transactionStatusMeta[transactionStatus.type];
+    const theme = themeStyles[meta.theme];
+    const timestampLabel = new Date(transactionStatus.timestamp).toLocaleTimeString();
+    const statusLabel = transactionStatus.status === 'submitted' ? 'Submitted' : transactionStatus.status;
+
+    const renderCopyButton = (value: string, label: string) => (
+      <button
+        onClick={() => copyToClipboard(value, label)}
+        className={`p-2 ${theme.button} rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center`}
+        title={`Copy ${label}`}
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      </button>
+    );
+
+    const renderExplorerButton = (hash: string) => (
+      <button
+        onClick={() => window.open(getExplorerUrl(hash), '_blank')}
+        className={`p-2 ${theme.button} rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center`}
+        title="View in Explorer"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+      </button>
+    );
+
+    const sections: ReactNode[] = [
+      <div key="status" className="flex items-center justify-between">
+        <span className={`text-sm font-medium ${theme.label}`}>Status:</span>
+        <span className={`text-sm font-semibold ${theme.pill} px-2 py-1 rounded-full`}>{statusLabel}</span>
+      </div>
+    ];
+
+    const hashValue = transactionStatus.hash;
+    sections.push(
+      <div key="hash">
+        <label className={`text-xs font-medium ${theme.label}`}>Transaction Hash:</label>
+        <div className="flex items-center space-x-2">
+          <code className={`flex-1 text-xs ${theme.text} break-all ${theme.codeBg} p-2 rounded`}>
+            {hashValue}
+          </code>
+          {renderCopyButton(hashValue, 'Transaction Hash')}
+          {renderExplorerButton(hashValue)}
+        </div>
+      </div>
+    );
+
+    if ('recipient' in transactionStatus) {
+      const recipientValue = transactionStatus.recipient;
+      sections.push(
+        <div key="recipient">
+          <label className={`text-xs font-medium ${theme.label}`}>Recipient:</label>
+          <div className="flex items-center space-x-2">
+            <code className={`flex-1 text-xs ${theme.text} break-all ${theme.codeBg} p-2 rounded`}>
+              {recipientValue}
+            </code>
+            {renderCopyButton(recipientValue, 'Recipient Address')}
+          </div>
+        </div>
+      );
+    }
+
+    if ('amount' in transactionStatus) {
+      sections.push(
+        <div key="amount">
+          <label className={`text-xs font-medium ${theme.label}`}>Amount:</label>
+          <div className="flex items-center space-x-2">
+            <code className={`flex-1 text-xs ${theme.text} break-all ${theme.codeBg} p-2 rounded`}>
+              {transactionStatus.amount} micro APT
+            </code>
+            {renderCopyButton(transactionStatus.amount, 'Amount')}
+          </div>
+        </div>
+      );
+    }
+
+    if ('function' in transactionStatus && transactionStatus.function) {
+      sections.push(
+        <div key="function">
+          <label className={`text-xs font-medium ${theme.label}`}>Function:</label>
+          <code className={`block text-xs ${theme.text} break-all ${theme.codeBg} p-2 rounded mt-1`}>
+            {transactionStatus.function}
+          </code>
+        </div>
+      );
+    }
+
+    if ('typeArguments' in transactionStatus && transactionStatus.typeArguments.length) {
+      sections.push(
+        <div key="typeArguments">
+          <label className={`text-xs font-medium ${theme.label}`}>Type Arguments:</label>
+          <div className="space-y-1 mt-1">
+            {transactionStatus.typeArguments.map((arg, index) => (
+              <code
+                key={`${arg}-${index}`}
+                className={`block text-xs ${theme.text} break-all ${theme.codeBg} p-2 rounded`}
+              >
+                {arg}
+              </code>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if ('arguments' in transactionStatus && transactionStatus.arguments.length) {
+      sections.push(
+        <div key="arguments">
+          <label className={`text-xs font-medium ${theme.label}`}>Function Arguments:</label>
+          <div className="space-y-1 mt-1">
+            {transactionStatus.arguments.map((arg, index) => (
+              <code
+                key={`${arg}-${index}`}
+                className={`block text-xs ${theme.text} break-all ${theme.codeBg} p-2 rounded`}
+              >
+                {arg}
+              </code>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if ('maxGas' in transactionStatus) {
+      sections.push(
+        <div key="maxGas" className="flex items-center justify-between">
+          <span className={`text-sm font-medium ${theme.label}`}>Max Gas:</span>
+          <span className={`text-sm ${theme.text}`}>{transactionStatus.maxGas}</span>
+        </div>
+      );
+    }
+
+    if ('gasPrice' in transactionStatus) {
+      sections.push(
+        <div key="gasPrice" className="flex items-center justify-between">
+          <span className={`text-sm font-medium ${theme.label}`}>Gas Price:</span>
+          <span className={`text-sm ${theme.text}`}>{transactionStatus.gasPrice}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`mt-4 p-4 rounded-lg ${theme.container}`}>
+        <div className="flex items-center justify-between mb-3">
+          <h4 className={`text-sm font-semibold flex items-center ${theme.heading}`}>
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {meta.title}
+          </h4>
+          <span className={`text-xs ${theme.pill} px-2 py-1 rounded-full`}>{timestampLabel}</span>
+        </div>
+        <div className="space-y-2">{sections}</div>
+      </div>
+    );
+  };
+
   const renderSignMessageCard = (extraClasses = '') => (
     <div className={`bg-white rounded-xl shadow-sm border border-gray-200 p-6 ${extraClasses}`}>
       <div className="flex items-center space-x-3 mb-4">
@@ -693,13 +1261,24 @@ function App() {
         </div>
       </div>
 
-      <div className="mt-4 p-4 bg-gray-900 rounded-lg overflow-x-auto">
-        <pre className="text-sm text-gray-300">
+      {renderSignaturePanel(['message', 'sign_verify'])}
+
+      <div className="mt-4 rounded-lg overflow-hidden border border-gray-200">
+        <SyntaxHighlighter
+          language="typescript"
+          style={tomorrow}
+          customStyle={{
+            margin: 0,
+            fontSize: '14px',
+            lineHeight: '1.5',
+          }}
+          showLineNumbers={false}
+        >
 {`const signature = await signMessage({
   message: message,
   nonce: crypto.randomUUID().replaceAll("-", ""),
 });`}
-        </pre>
+        </SyntaxHighlighter>
       </div>
     </div>
   );
@@ -758,8 +1337,20 @@ function App() {
         </div>
       </div>
 
-      <div className="mt-4 p-4 bg-gray-900 rounded-lg overflow-x-auto">
-        <pre className="text-sm text-gray-300">
+      {renderSignaturePanel(['transfer_sign'])}
+      {renderTransactionStatusPanel(['transfer_submit'])}
+
+      <div className="mt-4 rounded-lg overflow-hidden border border-gray-200">
+        <SyntaxHighlighter
+          language="typescript"
+          style={tomorrow}
+          customStyle={{
+            margin: 0,
+            fontSize: '14px',
+            lineHeight: '1.5',
+          }}
+          showLineNumbers={false}
+        >
 {`const { authenticator, rawTransaction } = await signTransaction({
   transactionOrPayload: {
     data: {
@@ -775,7 +1366,7 @@ const response = await aptosClient.transaction.submit.simple({
   transaction: SimpleTransaction.deserialize(new Deserializer(rawTransaction)),
   senderAuthenticator: authenticator
 });`}
-        </pre>
+        </SyntaxHighlighter>
       </div>
     </div>
   );
@@ -922,8 +1513,20 @@ const response = await aptosClient.transaction.submit.simple({
         </button>
       </div>
 
-      <div className="mt-4 p-4 bg-gray-900 rounded-lg overflow-x-auto">
-        <pre className="text-sm text-gray-300">
+      {renderSignaturePanel(['custom_sign'])}
+      {renderTransactionStatusPanel(['custom'])}
+
+      <div className="mt-4 rounded-lg overflow-hidden border border-gray-200">
+        <SyntaxHighlighter
+          language="typescript"
+          style={tomorrow}
+          customStyle={{
+            margin: 0,
+            fontSize: '14px',
+            lineHeight: '1.5',
+          }}
+          showLineNumbers={false}
+        >
 {`const { authenticator, rawTransaction } = await signTransaction({
   transactionOrPayload: {
     data: {
@@ -942,7 +1545,7 @@ const response = await aptosClient.transaction.submit.simple({
   transaction: SimpleTransaction.deserialize(new Deserializer(rawTransaction)),
   senderAuthenticator: authenticator
 });`}
-        </pre>
+        </SyntaxHighlighter>
       </div>
     </div>
   );
