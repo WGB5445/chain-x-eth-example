@@ -509,6 +509,7 @@ function App() {
           options: {
             maxGasAmount: 1500,
             gasUnitPrice: 100,
+            expirationSecondsFromNow: 600
           }
         }
       });
@@ -660,6 +661,7 @@ function App() {
           options: {
             maxGasAmount: parseInt(customMaxGas),
             gasUnitPrice: parseInt(customGasPrice),
+            expirationSecondsFromNow: 600
           }
         }
       });
@@ -1476,7 +1478,7 @@ function App() {
       function: "0x1::aptos_account::transfer",
       functionArguments: [recipient, amount]
     },
-    options: { maxGasAmount: 1500, gasUnitPrice: 100 }
+    options: { maxGasAmount: 1500, gasUnitPrice: 100, expirationSecondsFromNow: 600 }
   }
 });
 
